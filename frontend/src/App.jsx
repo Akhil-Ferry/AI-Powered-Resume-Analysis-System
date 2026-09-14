@@ -23,7 +23,7 @@ export default function App() {
         {resume && <ResumeFeedback key={resume.id + resume.updated_at} resumeId={resume.id} revision={revision} />}
       </main>
       <footer className="app-footer">
-        <p>Python | Flask | PostgreSQL | OpenAI API | NLP | Vector Embeddings</p>
+        <p>Python | Flask | PostgreSQL | OpenAI API | NLP  Vector Embeddings</p>
         <p>Match scores measure text similarity; they are not hiring probabilities.</p>
       </footer>
     </div>
