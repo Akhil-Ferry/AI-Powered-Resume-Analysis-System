@@ -1,64 +1,65 @@
+import html
 import re
+import threading
+import time
+from urllib.parse import urlparse
 
 import requests
+from flask import current_app
 
-from config import Config
-
-REQUEST_TIMEOUT = 10
-
-
-def _strip_html(html: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", html or "")
-    text = re.sub(r"&nbsp;|&amp;|&#39;|&quot;", " ", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+_cache = {}
+_lock = threading.Lock()
 
 
-def fetch_jobs(search: str = "", location: str = "", remote_only: bool = False, page: int = 1, limit: int = 25):
+def _strip_html(value):
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", value or ""))).strip()
+
+
+def fetch_jobs(search="", location="", remote_only=False, page=1, limit=25):
+    url = current_app.config["JOB_API_URL"]
+    key = (url, page)
     try:
-        response = requests.get(Config.JOB_API_URL, params={"page": page}, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
-        payload = response.json()
-    except requests.RequestException as exc:
-        return {"error": f"Could not reach job listings API: {exc}", "jobs": []}
-
-    raw_jobs = payload.get("data", [])
+        with _lock:
+            cached = _cache.get(key)
+        if cached and cached[0] > time.monotonic():
+            payload = cached[1]
+        else:
+            response = requests.get(url, params={"page": page}, timeout=15)
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+                raise ValueError("Invalid job feed")
+            with _lock:
+                if len(_cache) >= 32:
+                    _cache.clear()
+                _cache[key] = (time.monotonic() + current_app.config["JOB_CACHE_SECONDS"], payload)
+    except (requests.RequestException, ValueError):
+        return {"error": "Could not load live jobs. Try again, or search previously saved jobs.", "jobs": []}
     jobs = []
-
-    search_lower = search.lower().strip()
-    location_lower = location.lower().strip()
-
-    for job in raw_jobs:
-        title = job.get("title", "")
-        description = _strip_html(job.get("description", ""))
-        tags = job.get("tags", []) or []
-        job_location = job.get("location", "") or ""
-        is_remote = job.get("remote", False)
-
-        if remote_only and not is_remote:
+    for item in payload["data"]:
+        if not isinstance(item, dict):
             continue
-
-        if location_lower and location_lower not in job_location.lower() and not (
-            is_remote and location_lower in ("remote", "anywhere")
-        ):
+        title = str(item.get("title") or "")[:500]
+        description = _strip_html(str(item.get("description") or ""))[:12000]
+        tags = [t[:100] for t in item.get("tags", []) if isinstance(t, str)] if isinstance(item.get("tags"), list) else []
+        place = str(item.get("location") or "")[:255]
+        remote = bool(item.get("remote", False))
+        if remote_only and not remote:
             continue
-
-        if search_lower:
-            haystack = " ".join([title, description, " ".join(tags)]).lower()
-            if search_lower not in haystack:
-                continue
-
-        jobs.append({
-            "external_id": job.get("slug") or job.get("url") or title,
-            "title": title,
-            "company": job.get("company_name", "Unknown"),
-            "location": "Remote" if is_remote else (job_location or "Not specified"),
-            "url": job.get("url", ""),
-            "tags": tags,
-            "description": description[:4000],
-        })
-
+        if location.strip().lower() not in place.lower() and not (remote and location.strip().lower() in ("remote", "anywhere")):
+            continue
+        if search.strip().lower() not in " ".join([title, description, *tags]).lower():
+            continue
+        link = str(item.get("url") or "")[:2000]
+        if urlparse(link).scheme not in ("https", "http"):
+            link = ""
+        external_id = str(item.get("slug") or link or title)[:1000]
+        if not title or not external_id:
+            continue
+        jobs.append({"external_id": external_id, "title": title,
+                     "company": str(item.get("company_name") or "Unknown")[:255],
+                     "location": "Remote" if remote else (place or "Not specified"),
+                     "url": link, "tags": tags, "description": description, "remote": remote})
         if len(jobs) >= limit:
             break
-
     return {"error": None, "jobs": jobs}

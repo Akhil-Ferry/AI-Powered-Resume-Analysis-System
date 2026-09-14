@@ -1,19 +1,65 @@
-# Python / uv
-backend/.venv/
-backend/__pycache__/
-backend/**/__pycache__/
-backend/*.db
-backend/uploads/*
-!backend/uploads/.gitkeep
+# Secrets: keep only shareable example templates
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
 
-# Node / React
-frontend/node_modules/
-frontend/dist/
-frontend/.env
+# Local PostgreSQL cluster, credentials, runtime state and backups
+.local/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.dump
+*.backup
+backend/uploads/
 
-# OS
-.DS_Store
+# Python environments, bytecode, tests and packaging
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+pytest-cache-files-*/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.egg-info/
 
-# Generated release archives
+# Node dependencies and generated bundles
+node_modules/
+dist/
+dist-ssr/
+build/
+coverage/
+*.tsbuildinfo
+
+# Logs, generated archives and temporary files
+logs/
+*.log
 *.zip
+*.tar
+*.tar.gz
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.suo
+*.user

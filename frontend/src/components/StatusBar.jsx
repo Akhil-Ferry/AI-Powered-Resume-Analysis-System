@@ -3,32 +3,18 @@ import api from "../api";
 
 export default function StatusBar() {
   const [status, setStatus] = useState(null);
-  const [error, setError] = useState(false);
-
+  const [error, setError] = useState("");
   useEffect(() => {
-    api
-      .health()
-      .then(setStatus)
-      .catch(() => setError(true));
+    let active = true;
+    const check = () => api.health().then(data => { if (active) { setStatus(data); setError(""); } })
+      .catch(err => { if (active) setError(err.message); });
+    check();
+    const timer = setInterval(check, 30000);
+    return () => { active = false; clearInterval(timer); };
   }, []);
-
-  if (error) {
-    return (
-      <div className="status-bar status-bar-error">
-        Backend unreachable - make sure the Flask API is running (see README).
-      </div>
-    );
-  }
-
-  if (!status) {
-    return <div className="status-bar">Checking backend status...</div>;
-  }
-
-  return (
-    <div className={`status-bar ${status.openai_enabled ? "status-bar-openai" : "status-bar-local"}`}>
-      {status.openai_enabled
-        ? "OpenAI API key detected - using GPT-powered embeddings & suggestions."
-        : "Running on free local embeddings & heuristic suggestions. Add OPENAI_API_KEY in backend/.env to upgrade."}
-    </div>
-  );
+  if (error) return <div role="status" className="status-bar status-bar-error">{error}</div>;
+  if (!status) return <div className="status-bar">Connecting...</div>;
+  return <div role="status" className={`status-bar ${status.status === "ok" ? "status-bar-openai" : "status-bar-error"}`}>
+    {status.status === "ok" ? "Connected | Resume analysis ready" : status.message}
+  </div>;
 }

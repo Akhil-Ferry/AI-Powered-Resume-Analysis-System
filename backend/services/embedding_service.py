@@ -1,109 +1,106 @@
-"""
-Embedding service with automatic provider switching.
-
-- If OPENAI_API_KEY is set in .env  -> uses OpenAI's text-embedding-3-small
-  (higher quality, small per-call cost).
-- If no key is set                  -> automatically falls back to a free,
-  100% local sentence-transformers model (all-MiniLM-L6-v2). No API key,
-  no cost, runs on CPU.
-
-Every function returns `(vector, source)` where source is "openai" or "local",
-so callers can store which provider produced an embedding (needed because the
-two providers produce vectors of different dimensionality and can't be mixed
-in a single cosine-similarity comparison).
-"""
-
-import threading
-
+"""OpenAI embeddings with token-aware chunking, batching and a PostgreSQL cache."""
+from functools import lru_cache
+import hashlib
+import json
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity as sk_cosine_similarity
-
-from config import Config
-
-_local_model = None
-_local_lock = threading.Lock()
-_openai_client = None
-
-
-def _get_local_model():
-    global _local_model
-    if _local_model is None:
-        with _local_lock:
-            if _local_model is None:
-                from sentence_transformers import SentenceTransformer
-
-                _local_model = SentenceTransformer(Config.LOCAL_EMBEDDING_MODEL)
-    return _local_model
+import tiktoken
+from flask import current_app
+from openai import OpenAI, OpenAIError
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from models import db
+from models.database import EmbeddingCache
+from services.errors import ServiceError, openai_service_error
+from services.resume_parser import clean_text
 
 
-def _get_openai_client():
-    global _openai_client
-    if _openai_client is None:
-        from openai import OpenAI
-
-        _openai_client = OpenAI(api_key=Config.OPENAI_API_KEY)
-    return _openai_client
+def fingerprint(*parts):
+    return hashlib.sha256(json.dumps(parts, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
 
 
-def current_source() -> str:
-    return "openai" if Config.USE_OPENAI else "local"
+def current_source():
+    return f"openai:{current_app.config['OPENAI_EMBEDDING_MODEL']}:1536"
 
 
-def embed_text(text: str):
-    """Returns (vector: list[float], source: str)."""
-    if not text or not text.strip():
-        text = " "
+@lru_cache(maxsize=4)
+def _client(key, timeout):
+    return OpenAI(api_key=key, timeout=timeout, max_retries=1)
 
-    if Config.USE_OPENAI:
-        client = _get_openai_client()
-        response = client.embeddings.create(model=Config.OPENAI_EMBEDDING_MODEL, input=text)
-        return response.data[0].embedding, "openai"
 
-    model = _get_local_model()
-    vector = model.encode(text, normalize_embeddings=True)
-    return vector.tolist(), "local"
+def get_client():
+    key = current_app.config["OPENAI_API_KEY"]
+    if not key:
+        raise ServiceError("Set OPENAI_API_KEY in backend/.env and restart the backend.", 503)
+    return _client(key, current_app.config["OPENAI_TIMEOUT"])
+
+
+@lru_cache(maxsize=1)
+def tokenizer():
+    try:
+        return tiktoken.get_encoding("cl100k_base")
+    except Exception as exc:
+        raise ServiceError("Could not load the text tokenizer. Check the network connection and retry.") from exc
+
+
+def embed_text(text):
+    vectors, source = embed_texts([text])
+    return vectors[0], source
 
 
 def embed_texts(texts):
-    """Batch embed. Returns (list[vector], source)."""
-    texts = [t if t and t.strip() else " " for t in texts]
+    source = current_source()
+    if not texts:
+        return [], source
+    normalized = [clean_text(t) for t in texts]
+    if any(not t for t in normalized):
+        raise ValueError("Cannot embed empty text.")
+    keys = [fingerprint(source, t) for t in normalized]
+    cached = db.session.scalars(select(EmbeddingCache).where(EmbeddingCache.cache_key.in_(keys))).all()
+    vectors = {row.cache_key: [float(value) for value in row.embedding] for row in cached}
+    missing = dict((key, value) for key, value in zip(keys, normalized) if key not in vectors)
+    client = get_client() if missing else None
+    chunks, owners, weights = [], [], []
+    for key, value in missing.items():
+        tokens = tokenizer().encode(value, disallowed_special=())
+        for start in range(0, len(tokens), 8000):
+            chunk = tokens[start:start + 8000]
+            chunks.append(chunk)
+            owners.append(key)
+            weights.append(len(chunk))
+    sums, totals = {}, {}
+    try:
+        for start in range(0, len(chunks), 16):
+            batch = chunks[start:start + 16]
+            response = client.embeddings.create(
+                model=current_app.config["OPENAI_EMBEDDING_MODEL"],
+                input=batch, dimensions=1536,
+            )
+            data = sorted(response.data, key=lambda item: item.index)
+            if len(data) != len(batch) or [v.index for v in data] != list(range(len(batch))):
+                raise ServiceError("OpenAI returned an incomplete embedding batch.")
+            for offset, item in enumerate(data):
+                index = start + offset
+                vec = np.asarray(item.embedding, dtype=float)
+                if vec.shape != (1536,) or not np.isfinite(vec).all() or np.linalg.norm(vec) == 0:
+                    raise ServiceError("OpenAI returned an invalid embedding.")
+                key = owners[index]
+                sums[key] = sums.get(key, np.zeros(1536)) + vec * weights[index]
+                totals[key] = totals.get(key, 0) + weights[index]
+    except OpenAIError as exc:
+        raise openai_service_error(exc) from exc
+    for key in missing:
+        vector = sums[key] / totals[key]
+        norm = np.linalg.norm(vector)
+        if norm == 0:
+            raise ServiceError("OpenAI returned a zero embedding.")
+        vectors[key] = (vector / norm).tolist()
+        db.session.execute(insert(EmbeddingCache).values(cache_key=key, embedding=vectors[key]).on_conflict_do_nothing())
+    return [vectors[key] for key in keys], source
 
-    if Config.USE_OPENAI:
-        client = _get_openai_client()
-        response = client.embeddings.create(model=Config.OPENAI_EMBEDDING_MODEL, input=texts)
-        vectors = [d.embedding for d in sorted(response.data, key=lambda d: d.index)]
-        return vectors, "openai"
 
-    model = _get_local_model()
-    vectors = model.encode(texts, normalize_embeddings=True, batch_size=32)
-    return [v.tolist() for v in vectors], "local"
-
-
-def cosine_similarity(vec_a, vec_b) -> float:
-    a = np.array(vec_a).reshape(1, -1)
-    b = np.array(vec_b).reshape(1, -1)
-    if a.shape[1] != b.shape[1]:
-        raise ValueError(
-            f"Embedding dimension mismatch ({a.shape[1]} vs {b.shape[1]}). "
-            "This happens if one embedding was generated with OpenAI and the "
-            "other with the local model - re-embed both with the same provider."
-        )
-    return float(sk_cosine_similarity(a, b)[0][0])
-
-
-def rank_by_similarity(query_vector, candidates: list):
-    """candidates: list of dicts each with an 'embedding' key. Adds a 'score' key
-    (0-100 scale) and returns sorted, most similar first."""
-    if not candidates:
-        return []
-
-    query = np.array(query_vector).reshape(1, -1)
-    matrix = np.array([c["embedding"] for c in candidates])
-    scores = sk_cosine_similarity(query, matrix)[0]
-
-    for candidate, score in zip(candidates, scores):
-        # Cosine similarity can technically be negative. A match percentage is
-        # clearer (and safer for the UI) when expressed on a 0-100 scale.
-        candidate["score"] = round(max(0.0, float(score)) * 100, 2)
-
-    return sorted(candidates, key=lambda c: c["score"], reverse=True)
+def cosine_similarity(a, b):
+    a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    if a.shape != b.shape:
+        raise ValueError("Embedding dimensions differ. Re-save the resume to refresh its embedding.")
+    denom = np.linalg.norm(a) * np.linalg.norm(b)
+    return float(np.clip(np.dot(a, b) / denom, -1, 1)) if denom else 0.0

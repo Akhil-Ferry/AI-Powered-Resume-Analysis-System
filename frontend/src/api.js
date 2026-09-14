@@ -17,6 +17,17 @@ async function request(path, options = {}) {
 
 export const api = {
   health: () => request("/api/health"),
+  listResumes: (page = 1) => request(`/api/resumes?page=${page}`),
+  buildResume: (profile) => request('/api/resume/build', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile }),
+  }),
+  updateResume: (id, payload) => request(`/api/resume/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  }),
+  getAnalysisHistory: (id) => request(`/api/resume/${id}/analyses`),
+  searchSavedJobs: (payload) => request('/api/jobs/search', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  }),
 
   uploadResumeFile: (file) => {
     const formData = new FormData();

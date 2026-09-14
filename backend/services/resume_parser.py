@@ -1,5 +1,6 @@
 import io
 import re
+import unicodedata
 
 import PyPDF2
 import docx
@@ -51,6 +52,7 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
 
 
 def clean_text(text: str) -> str:
+    text = unicodedata.normalize("NFKC", text).replace("\x00", "")
     text = re.sub(r"\r\n|\r", "\n", text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -69,14 +71,15 @@ def extract_phones(text: str):
     return list(dict.fromkeys(cleaned))[:5]
 
 
+SKILL_ALIASES = {"postgres": "postgresql", "nodejs": "node.js", "golang": "go",
+                 "natural language processing": "nlp", "embeddings": "vector embeddings"}
+SKILL_PATTERNS = [(skill, re.compile(r"(?<!\w)" + re.escape(skill) + r"(?![\w+#])", re.IGNORECASE))
+                  for skill in SKILL_KEYWORDS]
+
+
 def extract_skills(text: str):
-    lowered = text.lower()
-    found = []
-    for skill in SKILL_KEYWORDS:
-        pattern = r"(?<![a-zA-Z0-9])" + re.escape(skill) + r"(?![a-zA-Z0-9])"
-        if re.search(pattern, lowered):
-            found.append(skill)
-    return found
+    return sorted({SKILL_ALIASES.get(skill, skill) for skill, pattern in SKILL_PATTERNS
+                   if pattern.search(text)})
 
 
 def parse_resume(file_bytes: bytes, filename: str):

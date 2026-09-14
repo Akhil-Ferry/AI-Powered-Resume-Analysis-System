@@ -9,6 +9,7 @@ export default function JobMatcher({ resumeId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [matches, setMatches] = useState(null);
+  const [savedOnly, setSavedOnly] = useState(false);
 
   async function handleSearch() {
     if (!resumeId) {
@@ -19,7 +20,9 @@ export default function JobMatcher({ resumeId }) {
     setError("");
     setMatches(null);
     try {
-      const data = await api.matchJobs(resumeId, { search, location, remoteOnly, topN: 10 });
+      const data = savedOnly
+        ? await api.searchSavedJobs({ ...(search.trim() ? { query: search } : { resume_id: resumeId }), location, remote_only: remoteOnly, top_n: 10 })
+        : await api.matchJobs(resumeId, { search, location, remoteOnly, topN: 10 });
       setMatches(data.matches || []);
     } catch (err) {
       setError(err.message);
@@ -32,8 +35,14 @@ export default function JobMatcher({ resumeId }) {
     <section className="card">
       <div className="card-header">
         <span className="step-badge">3</span>
-        <h2>Find & Rank Live Job Listings</h2>
+        <h2>Find matching jobs</h2>
       </div>
+
+      <label className="checkbox-label saved-search">
+        <input type="checkbox" checked={savedOnly} onChange={e => { setSavedOnly(e.target.checked); setMatches(null); }} />
+        Search previously saved jobs
+      </label>
+      {savedOnly && <p className="muted small">Describe a role to search by meaning, or leave the keyword blank to match your resume. Live searches save jobs for later.</p>}
 
       <div className="filters-row">
         <input
@@ -53,7 +62,7 @@ export default function JobMatcher({ resumeId }) {
           Remote only
         </label>
       </div>
-      <button className="btn btn-primary" onClick={handleSearch} disabled={loading}>
+      <button className="btn btn-primary" onClick={handleSearch} disabled={loading || !resumeId}>
         {loading ? "Searching..." : "Find Matching Jobs"}
       </button>
 

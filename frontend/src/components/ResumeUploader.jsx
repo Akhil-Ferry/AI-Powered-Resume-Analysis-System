@@ -75,6 +75,8 @@ export default function ResumeUploader({ resume, onResumeReady }) {
       <div className="or-divider">or paste resume text</div>
 
       <textarea
+        aria-label="Resume text"
+        maxLength={40000}
         rows={6}
         placeholder="Paste your resume text here..."
         value={text}

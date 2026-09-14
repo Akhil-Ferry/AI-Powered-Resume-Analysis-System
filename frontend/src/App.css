@@ -229,3 +229,35 @@ textarea:focus, input[type="text"]:focus {
   font-size: 12px;
   margin-top: 30px;
 }
+
+.builder-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.builder-grid label { font-size: 14px; font-weight: 500; }
+.builder-grid .wide { grid-column: 1 / -1; }
+input[type="email"], select { width: 100%; padding: 10px 12px; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: white; }
+.actions { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.resume-picker { flex: 1; min-width: 200px; font-size: 14px; }
+.btn-danger { color: #b91c1c; background: #fef2f2; }
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.tab { border: 1px solid var(--border); background: white; padding: 10px 16px; border-radius: 8px; cursor: pointer; }
+.tab.active { color: white; background: var(--primary); border-color: var(--primary); }
+.resume-preview { margin-top: 24px; padding: 20px; border: 1px solid var(--border); border-radius: 8px; }
+.resume-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 14px/1.6 Georgia, serif; }
+.history-item { padding: 12px 0; border-top: 1px solid var(--border); }
+.history-item summary { cursor: pointer; font-size: 14px; }
+.active-resume { border-left: 3px solid var(--primary); padding: 10px 14px; background: #eef2ff; }
+.saved-search { margin-top: 16px; }
+@media (max-width: 600px) {
+  .builder-grid { grid-template-columns: 1fr; }
+  .app { padding: 20px 12px 40px; }
+  .card { padding: 18px; }
+  .app-header h1 { font-size: 25px; }
+}
+@media print {
+  @page { margin: 15mm; }
+  body { background: white; }
+  .app-header, .status-bar, .app-footer,
+  .app-main > :not(.card:has(.resume-preview)),
+  .card:has(.resume-preview) > :not(.resume-preview) { display: none !important; }
+  .app, .card, .resume-preview { max-width: none; margin: 0; padding: 0; border: 0; box-shadow: none; }
+  .resume-preview h3 { display: none; }
+}

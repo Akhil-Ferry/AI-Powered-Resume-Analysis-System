@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
-# Starts backend (Flask, via uv) and frontend (React, via npm) together.
-# First run: make sure you've run `uv sync` in backend/ and `npm install` in frontend/.
-set -e
-
+# Requires an already-running PostgreSQL database with pgvector and backend/.env.
+set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-echo "Starting backend on http://localhost:5000 ..."
-(cd "$ROOT_DIR/backend" && uv run python app.py) &
+(cd "$ROOT_DIR/backend" && uv run python manage.py upgrade)
+(cd "$ROOT_DIR/backend" && exec uv run python server.py) &
 BACKEND_PID=$!
-
-sleep 2
-
-echo "Starting frontend on http://localhost:5173 ..."
-(cd "$ROOT_DIR/frontend" && npm run dev) &
+(cd "$ROOT_DIR/frontend" && exec npm run dev -- --port 5174 --strictPort) &
 FRONTEND_PID=$!
-
-trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null" EXIT
-
+trap 'kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true' EXIT
+echo "App: http://localhost:5174 | API: http://localhost:5000"
 wait

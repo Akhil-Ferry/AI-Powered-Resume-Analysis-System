@@ -3,7 +3,7 @@ import api from "../api";
 import ScoreRing from "./ScoreRing";
 import BadgeList from "./BadgeList";
 
-export default function JobAnalyzer({ resumeId }) {
+export default function JobAnalyzer({ resumeId, onAnalyzed }) {
   const [jobDescription, setJobDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -24,6 +24,7 @@ export default function JobAnalyzer({ resumeId }) {
     try {
       const data = await api.analyze(resumeId, jobDescription);
       setResult(data);
+      onAnalyzed?.();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -40,11 +41,13 @@ export default function JobAnalyzer({ resumeId }) {
 
       <textarea
         rows={7}
+        aria-label="Job description"
+        maxLength={40000}
         placeholder="Paste a job description here..."
         value={jobDescription}
         onChange={(e) => setJobDescription(e.target.value)}
       />
-      <button className="btn btn-primary" onClick={handleAnalyze} disabled={loading}>
+      <button className="btn btn-primary" onClick={handleAnalyze} disabled={loading || !resumeId}>
         {loading ? "Analyzing..." : "Analyze Match"}
       </button>
 
@@ -57,6 +60,7 @@ export default function JobAnalyzer({ resumeId }) {
             <div>
               <p className="result-title">Semantic Match Score</p>
               <p className="muted small">Suggestions powered by: {result.suggestions_source}</p>
+              {result.cached && <p className="muted small">Loaded from your saved analysis.</p>}
             </div>
           </div>
 
