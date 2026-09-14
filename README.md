@@ -164,5 +164,3 @@ resume_project/
   `backend/services/job_fetcher.py` if you prefer (e.g. Remotive, RemoteOK).
 - **Production considerations**: add auth/rate-limiting, move uploaded files
   to object storage, and set `FLASK_DEBUG=False` + a real `FLASK_SECRET_KEY`.
-
-# AI-Powered-Resume-Analysis-System

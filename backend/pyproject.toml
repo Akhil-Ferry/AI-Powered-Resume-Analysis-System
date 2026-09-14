@@ -1,0 +1,23 @@
+[project]
+name = "resume-analyzer-backend"
+version = "1.0.0"
+description = "AI-Powered Resume Analysis System - Flask backend"
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0.3",
+    "flask-sqlalchemy>=3.1.1",
+    "flask-cors>=4.0.1",
+    "psycopg2-binary>=2.9.9",
+    "python-dotenv>=1.0.1",
+    "openai>=1.40.0",
+    "sentence-transformers>=3.0.1",
+    "scikit-learn>=1.5.1",
+    "numpy>=1.26.4",
+    "pypdf2>=3.0.1",
+    "python-docx>=1.1.2",
+    "requests>=2.32.3",
+    "werkzeug>=3.0.3",
+]
+
+[tool.uv]
+package = false
