@@ -18,63 +18,31 @@ A resume builder and analysis application with a React interface. PostgreSQL is 
 
 Match scores are cosine similarity percentages, **not** hiring probabilities or ATS scores. Keyword extraction uses a maintained technical vocabulary; it is not a general-purpose entity-recognition model.
 
-## Prerequisites
+## Docker setup
 
-- Python 3.10+ and uv.
-- Node.js 24 LTS and npm.
-- PostgreSQL with pgvector 0.8+ installed.
-- An OpenAI API key with available API credits.
-
-## Windows setup
-
-The native helper defaults to PostgreSQL 18 under `C:\Program Files\PostgreSQL\18`. Install PostgreSQL and pgvector first, or set `PG_BIN` to your PostgreSQL bin directory.
-The project uses its own cluster in `.local/postgres`, bound to **127.0.0.1:5433**.
-It does not change the system PostgreSQL service.
-
-One-time setup:
+Install Docker Desktop, then set an OpenAI key in your shell:
 
 ```powershell
-.\setup.ps1
+$env:OPENAI_API_KEY="your-own-key"
+docker compose up --build
 ```
 
-This installs dependencies, generates database credentials, creates the database and pgvector extension, and applies schema migrations. It preserves an existing OpenAI key.
+Open **http://localhost:5174**. The API is available at **http://localhost:5000**.
+The database, backend, and frontend run as separate containers. PostgreSQL data is
+persisted in the `postgres_data` Docker volume. Stop the stack with
+`docker compose down`; add `-v` only when you intentionally want to delete the
+database volume.
 
-In **backend/.env**, set and save:
-
-```dotenv
-OPENAI_API_KEY=your-own-key
-```
-
-Start:
-
-```powershell
-.\run.ps1
-```
-
-Open **http://localhost:5174**. The API runs on **http://localhost:5000**.
-The frontend uses port 5174 by default.
-
-Stop application servers started by the script:
-
-```powershell
-.\stop.ps1
-```
-
-PostgreSQL remains running. To stop the project's database separately:
-
-```powershell
-backend\.venv\Scripts\python.exe scripts\local_db.py stop
-```
-
-To restart after editing environment settings, run `stop.ps1`, then `run.ps1`.
-Logs are in `.local/*.log`. If a local PowerShell execution policy blocks scripts, invoke them using `powershell -ExecutionPolicy Bypass -File .\run.ps1`.
+For a hosted PostgreSQL instance, replace the `DATABASE_URL` value in
+`docker-compose.yml` and keep pgvector enabled. Do not commit API keys or
+production database credentials.
 
 ## Database and environment details
 
 | Setting | Project value |
 |---|---|
-| Database host | `127.0.0.1` |
-| Port | `5433` |
+| Database host | `db` inside Docker |
+| Port | `5432` inside Docker |
 | Database | `resume_analyzer` |
 | Application user | `resume_app` (not a superuser) |
 | Password | Generated locally; included in `backend/.env`'s `DATABASE_URL` |
@@ -83,9 +51,11 @@ Logs are in `.local/*.log`. If a local PowerShell execution policy blocks script
 | Recommendation model | `gpt-4o-mini` |
 | Frontend API URL | `frontend/.env`: `VITE_API_BASE_URL=http://localhost:5000` |
 
-`backend/.env`, `frontend/.env` and `.local/` are excluded from Git. The project cluster's administrator credentials are kept in `.local/database.json` for local setup and isolated tests. Do not publish these files.
+`backend/.env`, `frontend/.env` and `.local/` are excluded from Git. Docker Compose
+credentials are development defaults; use secrets or environment variables in
+production.
 
-For a different PostgreSQL installation, set `PG_BIN` before setup. The native setup helper is for Windows. For a hosted database or Linux/macOS, provision PostgreSQL with pgvector 0.8+, enable the extension as its administrator, and set:
+For a hosted database, provision PostgreSQL with pgvector 0.8+, enable the extension as its administrator, and set:
 
 ```dotenv
 DATABASE_URL=postgresql://USER:URL_ENCODED_PASSWORD@HOST:5432/DATABASE?sslmode=require
@@ -97,26 +67,26 @@ Use the SSL settings required by your provider. The application user needs permi
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-Copy `backend/.env.example` to `backend/.env` and `frontend/.env.example` to `frontend/.env`, then fill in your database URL and API key.
+The backend image runs `python manage.py upgrade` before starting the API, so
+migrations are applied automatically after PostgreSQL is healthy.
 
-Then:
+## Embedding model options
 
-```bash
-cd backend
-uv sync --locked
-uv run python manage.py upgrade
-uv run python server.py
-```
+The default is OpenAI `text-embedding-3-small` with 1536 dimensions. OpenAI
+usage is paid, although the model is relatively inexpensive. The application
+also uses `gpt-4o-mini` for written recommendations, which is a separate
+chat-model cost.
 
-In another terminal:
-
-```bash
-cd frontend
-npm ci
-npm run dev -- --port 5174 --strictPort
-```
-
-`run.sh` also starts both application servers after a PostgreSQL database is configured and running. The Windows convenience runner assumes ports 5000 and 5174; for other ports start the servers individually and update the frontend URL and CORS origins.
+Free or local alternatives are possible, but they are not drop-in replacements
+in the current build: the schema fixes vectors at `vector(1536)` and the
+embedding service calls the OpenAI API. Models such as
+`sentence-transformers/all-MiniLM-L6-v2` (384 dimensions) or
+`BAAI/bge-small-en-v1.5` (384 dimensions) can run locally with Ollama or
+Sentence Transformers, but require an embedding-provider adapter and a database
+migration/re-embedding of existing records. A local model also does not replace
+the OpenAI chat recommendations. If you need a completely free setup, use a
+local embedding model plus a local chat model such as Ollama, accepting the
+additional integration and hardware requirements.
 
 ## Architecture
 

@@ -1,6 +1,6 @@
 # Development
 
-Follow the setup instructions in [README.md](README.md). Keep real API keys,
+Follow the Docker setup instructions in [README.md](README.md). Keep real API keys,
 database passwords, resumes and database files out of commits. Copy the provided
 `.env.example` files locally; never replace their placeholders with credentials.
 
@@ -21,11 +21,10 @@ git status --short
 ```
 
 Backend tests create and delete a uniquely named temporary PostgreSQL database.
-They use the private local cluster created by `setup.ps1`, or an administrator
-connection supplied through `TEST_POSTGRES_ADMIN_URL`. Set `DATABASE_URL` to the
-same test server when using that override. The administrator needs permission
-to create databases and enable pgvector. OpenAI calls are mocked in CI; no real
-API key is required. Never run tests with production administrator credentials.
+Use a PostgreSQL/pgvector test server and provide its administrator connection
+through `TEST_POSTGRES_ADMIN_URL`. Set `DATABASE_URL` to the same test server
+when using that override. OpenAI calls are mocked in CI; no real API key is
+required. Never run tests with production administrator credentials.
 
 Add schema changes as new numbered SQL files in `backend/migrations/`; do not
 modify an already-applied migration. Keep both dependency lockfiles committed.

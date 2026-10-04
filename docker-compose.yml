@@ -1,0 +1,41 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: resume_analyzer
+      POSTGRES_USER: resume_app
+      POSTGRES_PASSWORD: resume_app_dev_password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resume_app -d resume_analyzer"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgresql://resume_app:resume_app_dev_password@db:5432/resume_analyzer
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-docker-development-secret}
+      CORS_ORIGINS: http://localhost:5174,http://127.0.0.1:5174
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "5174:80"
+
+volumes:
+  postgres_data:

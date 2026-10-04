@@ -30,7 +30,7 @@ def database_url():
             pytest.fail("DATABASE_URL and TEST_POSTGRES_ADMIN_URL must refer to the same test server.")
     else:
         if not path.exists():
-            pytest.fail("Run scripts/local_db.py setup or configure TEST_POSTGRES_ADMIN_URL.")
+            pytest.fail("Start the Docker Compose database or configure TEST_POSTGRES_ADMIN_URL.")
         credentials = json.loads(path.read_text())
         options = dict(host="127.0.0.1", port=credentials["port"], user="resume_admin",
                        password=credentials["admin_password"])

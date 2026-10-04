@@ -28,7 +28,7 @@ def create_app(overrides=None):
         app.config.update(overrides)
     url = app.config["SQLALCHEMY_DATABASE_URI"]
     if not url.startswith(("postgresql://", "postgresql+psycopg2://")):
-        raise RuntimeError("PostgreSQL is required. Set DATABASE_URL in backend/.env; run scripts/local_db.py setup.")
+        raise RuntimeError("PostgreSQL is required. Set DATABASE_URL or start the Docker Compose database.")
     if app.config["OPENAI_EMBEDDING_MODEL"] not in ("text-embedding-3-small", "text-embedding-3-large"):
         raise RuntimeError("Use text-embedding-3-small or text-embedding-3-large (1536 dimensions).")
     db.init_app(app)
